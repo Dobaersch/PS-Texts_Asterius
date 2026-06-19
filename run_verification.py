@@ -79,21 +79,32 @@ predictions = pipeline.predict(
 )
 
 print("7. Auswertung...")
-# Filtere heraus, wo das Modell die Pseudo-Texte mit Asterius verglichen hat (Case-insensitive Vergleich)
-asterius_matches = predictions[predictions['ComparatorClass'].str.lower() == 'asterius']
+# 1. Filtere nur die Zeilen, in denen Pseudo-Texte mit Asterius verglichen wurden
+asterius_matches = predictions[predictions['ComparatorClass'].str.lower() == 'asterius'].copy()
 
-# Sortiere nach der vom Modell vergebenen Wahrscheinlichkeit
-asterius_matches = asterius_matches.sort_values(by='Probability', ascending=False)
+# 2. Wir ignorieren die 'Probability' und nutzen nur die 'Distance'.
+# Je kleiner die Distanz, desto höher die stilistische Ähnlichkeit.
 
-# Zeige nur die Paare an, bei denen die Wahrscheinlichkeit für denselben Autor > 75% ist (Precision Threshold)
-strong_candidates = asterius_matches[asterius_matches['Probability'] >= 0.75]
+# 3. Aggregieren: Berechne die durchschnittliche Distanz pro Pseudo-Text zu allen Asterius-Samples
+mean_distances = asterius_matches.groupby('ComparedLabel')['Distance'].mean().reset_index()
 
-print("\n--- HOCHWAHRSCHEINLICHE ASTERIUS-KANDIDATEN ---")
-if strong_candidates.empty:
-    print("Das Modell hat keine starken Übereinstimmungen (>75%) mit Asterius gefunden.")
-else:
-    print(strong_candidates[['ComparedLabel', 'ComparatorLabel', 'Probability']])
+# 4. Zusätzliche Metrik: Minimale Distanz (Welches war das absolut ähnlichste Asterius-Sample?)
+min_distances = asterius_matches.groupby('ComparedLabel')['Distance'].min().reset_index()
+mean_distances['Min_Distance'] = min_distances['Distance']
 
-# Ergebnisse in eine CSV exportieren für Ihre philologische Auswertung
-asterius_matches.to_csv("asterius_results_full.csv", index=False)
-print("\nAlle Ergebnisse wurden in 'asterius_results_full.csv' gespeichert.")
+# 5. Aufsteigend nach der Durchschnitts-Distanz sortieren (die besten Kandidaten stehen oben)
+mean_distances = mean_distances.sort_values(by='Distance', ascending=True)
+
+# Spalten zur besseren Lesbarkeit umbenennen
+mean_distances = mean_distances.rename(columns={'ComparedLabel': 'Pseudo_Text_Sample', 'Distance': 'Mean_Distance_to_Asterius'})
+
+print("\n--- DURCHSCHNITTLICHE DISTANZEN ZU ASTERIUS (Top 10) ---")
+# Zeige die 10 Samples mit der geringsten Durchschnittsdistanz
+print(mean_distances.head(10))
+
+# 6. Ergebnisse speichern
+mean_distances.to_csv("asterius_aggregated_distances.csv", index=False)
+print("\nAggregierte Ergebnisse wurden in 'asterius_aggregated_distances.csv' gespeichert.")
+
+# (Optional) Speichere zur Sicherheit auch nochmal alle Rohdaten, falls du Einzelvergleiche brauchst
+asterius_matches.to_csv("asterius_results_raw_distances.csv", index=False)

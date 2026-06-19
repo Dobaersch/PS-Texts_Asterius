@@ -81,9 +81,11 @@ def process_corpus(input_folder, output_csv):
                 raw_text = f.read()
             clean_filename = filename.replace(".txt", "")
 
-        parts = clean_filename.split("_", 1)
-        author = parts[0]
-        title = parts[1] if len(parts) > 1 else "Unknown"
+        if "_" in clean_filename:
+            author, title = clean_filename.split("_", 1)
+        else:
+            author = "Pseudo"
+            title = clean_filename
 
         samples = clean_and_sample_text(raw_text)
 
