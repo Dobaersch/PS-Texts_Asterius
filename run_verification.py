@@ -79,6 +79,11 @@ predictions = pipeline.predict(
 )
 
 print("7. Auswertung...")
+# Mapping von Titre zu Auteur aus dem originalen df_pseudo erstellen,
+# da die Klassen im DatasetWrapper ansonsten standardmäßig zu [OOD] werden.
+author_map = df_pseudo.set_index('Titre')['Auteur'].to_dict()
+predictions['ComparedClass'] = predictions['ComparedLabel'].map(author_map)
+
 # 1. Filtere nur die Zeilen, in denen Pseudo-Texte mit Asterius verglichen wurden
 asterius_matches = predictions[predictions['ComparatorClass'].str.lower() == 'asterius'].copy()
 
@@ -86,17 +91,24 @@ asterius_matches = predictions[predictions['ComparatorClass'].str.lower() == 'as
 # Je kleiner die Distanz, desto höher die stilistische Ähnlichkeit.
 
 # 3. Aggregieren: Berechne die durchschnittliche Distanz pro Pseudo-Text zu allen Asterius-Samples
-mean_distances = asterius_matches.groupby('ComparedLabel')['Distance'].mean().reset_index()
+mean_distances = asterius_matches.groupby(['ComparedClass', 'ComparedLabel'])['Distance'].mean().reset_index()
 
 # 4. Zusätzliche Metrik: Minimale Distanz (Welches war das absolut ähnlichste Asterius-Sample?)
-min_distances = asterius_matches.groupby('ComparedLabel')['Distance'].min().reset_index()
+min_distances = asterius_matches.groupby(['ComparedClass', 'ComparedLabel'])['Distance'].min().reset_index()
 mean_distances['Min_Distance'] = min_distances['Distance']
 
 # 5. Aufsteigend nach der Durchschnitts-Distanz sortieren (die besten Kandidaten stehen oben)
 mean_distances = mean_distances.sort_values(by='Distance', ascending=True)
 
 # Spalten zur besseren Lesbarkeit umbenennen
-mean_distances = mean_distances.rename(columns={'ComparedLabel': 'Pseudo_Text_Sample', 'Distance': 'Mean_Distance_to_Asterius'})
+mean_distances = mean_distances.rename(columns={
+    'ComparedClass': 'Auteur',
+    'ComparedLabel': 'Pseudo_Text_Sample',
+    'Distance': 'Mean_Distance_to_Asterius'
+})
+
+# Spaltenreihenfolge anpassen für eine schönere Tabelle
+mean_distances = mean_distances[['Auteur', 'Pseudo_Text_Sample', 'Mean_Distance_to_Asterius', 'Min_Distance']]
 
 print("\n--- DURCHSCHNITTLICHE DISTANZEN ZU ASTERIUS (Top 10) ---")
 # Zeige die 10 Samples mit der geringsten Durchschnittsdistanz
